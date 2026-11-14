@@ -1,0 +1,198 @@
+{
+  "name": "Verbeke - Intake",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Aanvraag bij Verbeke",
+        "formDescription": "Vertel kort wat er aan de hand is. We nemen zo snel mogelijk contact met je op.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Naam",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "E-mail",
+              "fieldType": "email",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Telefoon"
+            },
+            {
+              "fieldLabel": "Gemeente",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Waarover gaat het?",
+              "fieldType": "textarea",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        0
+      ],
+      "id": "f3d274a6-57e1-4078-840c-9fcdf4660af7",
+      "name": "On form submission",
+      "webhookId": "27b519e0-f09a-45e8-bff0-5d3d70d61a85"
+    },
+    {
+      "parameters": {
+        "text": "={{ $json['Waarover gaat het?'] }}",
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"onderwerp\": {\n      \"type\": \"string\",\n      \"enum\": [\"warmtepomp\", \"ventilatie\", \"sanitair\", \"renovatie\", \"herstelling\"]\n    },\n    \"dringend\": {\n      \"type\": \"boolean\",\n      \"description\": \"true als iets kapot is of de klant zonder verwarming of water zit, anders false\"\n    },\n    \"samenvatting\": {\n      \"type\": \"string\",\n      \"description\": \"Hoogstens 15 woorden, in het Nederlands. Enkel wat de klant zelf zegt, geen vermoedens of oorzaken.\"\n    }\n  },\n  \"required\": [\"onderwerp\", \"dringend\", \"samenvatting\"]\n}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "3a047baf-a6e4-475d-884e-c3954ce83de3",
+      "name": "Information Extractor"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-haiku-5-5",
+          "mode": "list",
+          "cachedResultName": "Claude Haiku 5.5"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.6,
+      "position": [
+        160,
+        208
+      ],
+      "id": "fa3ee764-6e00-49ed-b4b1-a9e1a3c12d84",
+      "name": "Anthropic Chat Model",
+      "credentials": {
+        "anthropicApi": {
+          "id": "MhmQQDuaf4WJZ21Q",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select public.intake_aanvraag(\n  p_naam         => $1,\n  p_email        => $2,\n  p_gemeente     => $3,\n  p_omschrijving => $4,\n  p_onderwerp    => $5,\n  p_dringend     => $6::boolean,\n  p_samenvatting => $7,\n  p_telefoon     => nullif($8, '')\n) as aanvraag_id;",
+        "options": {
+          "queryReplacement": "={{ [\n  $('On form submission').item.json['Naam'],\n  $('On form submission').item.json['E-mail'],\n  $('On form submission').item.json['Gemeente'],\n  $('On form submission').item.json['Waarover gaat het?'],\n  $json.output.onderwerp,\n  $json.output.dringend,\n  $json.output.samenvatting,\n  $('On form submission').item.json['Telefoon'] ?? ''\n] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        592,
+        0
+      ],
+      "id": "d967c63e-a80e-46f2-abc9-589b89988585",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "YXLAz8lIbbACE0zH",
+          "name": "verbeke n8n - intake"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "arnegoesai@gmail.com",
+        "toEmail": "arnegoesai@gmail.com",
+        "subject": "={{ $('Information Extractor').item.json.output.dringend ? 'DRINGEND · ' : '' }}Nieuwe aanvraag #{{ $json.aanvraag_id }} · {{ $('Information Extractor').item.json.output.onderwerp }}",
+        "emailFormat": "text",
+        "text": "=Nieuwe aanvraag via het webformulier.\n\nKlant: {{ $('On form submission').item.json['Naam'] }} ({{ $('On form submission').item.json['Gemeente'] }})\nE-mail: {{ $('On form submission').item.json['E-mail'] }}\nTelefoon: {{ $('On form submission').item.json['Telefoon'] || 'niet opgegeven' }}\n\nSamenvatting (AI): {{ $('Information Extractor').item.json.output.samenvatting }}\n\nWat de klant schreef:\n{{ $('On form submission').item.json['Waarover gaat het?'] }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        816,
+        0
+      ],
+      "id": "08e30b9a-a573-42dd-a49c-44024d8c3970",
+      "name": "Send an Email",
+      "webhookId": "8a29ca6f-0003-479c-8cdc-9bb27638d1b0",
+      "credentials": {
+        "smtp": {
+          "id": "6htCeqCgVAzpa6Qe",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Information Extractor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Information Extractor",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Information Extractor": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "50d14580-7d9f-4095-b3fd-151748854266",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "03b87fbcef8097692678b085866731ee5f6230817c97a42d947cac0960b56a2c"
+  },
+  "nodeGroups": [],
+  "id": "FxkcltXxZw3regHF",
+  "tags": []
+}
