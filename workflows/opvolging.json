@@ -1,0 +1,213 @@
+{
+  "name": "Verbeke - Opvolging",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -16,
+        0
+      ],
+      "id": "04bfab82-2528-4f6c-a86d-43c4c2594a51",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select * from public.offertes_voor_herinnering($1);",
+        "options": {
+          "queryReplacement": "2"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        224,
+        0
+      ],
+      "id": "7b17910d-9806-4744-9868-c4f2e0f375c9",
+      "name": "Offertes ophalen",
+      "credentials": {
+        "postgres": {
+          "id": "b7MU6Ran58eh4hTc",
+          "name": "N8N Opvolging"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "arnegoesai@gmail.com",
+        "toEmail": "arnegoesai@gmail.com",
+        "subject": "=[TEST] Uw offerte {{ $json.offertenummer }} bij Verbeke",
+        "emailFormat": "text",
+        "text": "=[TEST: zou verstuurd worden naar {{ $json.email }}]\n\nBeste {{ $json.voornaam }},\n\nOp {{ DateTime.fromISO($json.verstuurd_op).setLocale('nl').toFormat('d MMMM yyyy') }} stuurden we u onze offerte {{ $json.offertenummer }} voor {{ $json.onderwerp || 'uw project' }}.\n\nHeeft u nog vragen, of wilt u iets aanpassen? Antwoord gerust op deze mail, dan nemen we contact met u op.\n\nMet vriendelijke groeten,\nVerbeke Installatietechniek",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        448,
+        0
+      ],
+      "id": "6078d46b-4b29-45d1-9df4-a40417d8e26f",
+      "name": "Send an Email",
+      "webhookId": "3c4d001b-b3f2-481a-8dba-b9cbaeb40b25",
+      "credentials": {
+        "smtp": {
+          "id": "6htCeqCgVAzpa6Qe",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select public.registreer_opvolging($1) as gewijzigd;",
+        "options": {
+          "queryReplacement": "={{ $('Offertes ophalen').item.json.offerte_id }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        672,
+        0
+      ],
+      "id": "5e5f5609-041b-43d6-9e81-be8bcf7cd354",
+      "name": "Opvolging registeren",
+      "credentials": {
+        "postgres": {
+          "id": "b7MU6Ran58eh4hTc",
+          "name": "N8N Opvolging"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select werfleider_voornaam,\n       werfleider_email,\n       count(*) as aantal,\n       string_agg(\n         format('- %s · %s · %s · %s dagen open',\n                offertenummer, klant_naam, coalesce(onderwerp, '?'), dagen_open),\n         E'\\n' order by verstuurd_op) as lijst\nfrom public.offertes_voor_werfleider()\ngroup by werfleider_id, werfleider_voornaam, werfleider_email\norder by werfleider_id;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        352,
+        144
+      ],
+      "id": "c29d0ec2-ebdf-473b-8a14-550091e30be0",
+      "name": "Lijst per werfleider",
+      "credentials": {
+        "postgres": {
+          "id": "b7MU6Ran58eh4hTc",
+          "name": "N8N Opvolging"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "arnegoesai@gmail.com",
+        "toEmail": "arnegoesai@gmail.com",
+        "subject": "=[TEST] {{ $json.aantal }} offertes om te bellen",
+        "emailFormat": "text",
+        "text": "=[TEST: zou verstuurd worden naar {{ $json.werfleider_email }}]\n\nDag {{ $json.werfleider_voornaam }},\n\nDeze offertes kregen al een herinnering, maar de klant reageerde nog niet. Een telefoontje maakt vaak het verschil:\n\n{{ $json.lijst }}\n\nFijne dag!",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        576,
+        144
+      ],
+      "id": "ac41973b-50c8-4b5c-97f3-63cce3ea6cd9",
+      "name": "Send an Email1",
+      "webhookId": "a73e41b4-c53e-4972-b68d-faaa1199a4ce",
+      "credentials": {
+        "smtp": {
+          "id": "6htCeqCgVAzpa6Qe",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Offertes ophalen",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Lijst per werfleider",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offertes ophalen": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send an Email": {
+      "main": [
+        [
+          {
+            "node": "Opvolging registeren",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lijst per werfleider": {
+      "main": [
+        [
+          {
+            "node": "Send an Email1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "timezone": "Europe/Brussels",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "d9155e36-c499-4660-8f8f-984535f9abb8",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "id": "baIk5rFykC1uMSYv",
+  "tags": []
+}
